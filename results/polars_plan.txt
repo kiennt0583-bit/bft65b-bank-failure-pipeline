@@ -1,0 +1,22 @@
+=== NAIVE plan (optimised=False) ===
+SORT BY [col("REPDTE")]
+  AGGREGATE[maintain_order: false]
+    [(col("EQ") / col("ASSET")).mean().alias("er"), col("ASSET").sum()] BY [col("REPDTE")]
+    FROM
+    FILTER col("REPDTE") >= 2008-01-01
+    FROM
+      Parquet SCAN [C:/Users/Lenovo/Desktop/FinTech/Senior/Kỳ 7/Big Data/bft65b_bank_failure/bft65b_bank_failure/data_proc/panel.parquet]
+      PROJECT */42 COLUMNS
+      ESTIMATED ROWS: 1676980
+
+=== OPTIMISED plan ===
+SORT BY [col("REPDTE")]
+  AGGREGATE[maintain_order: false]
+    [(col("EQ") / col("ASSET")).mean().alias("er"), col("ASSET").sum()] BY [col("REPDTE")]
+    FROM
+    Parquet SCAN [C:/Users/Lenovo/Desktop/FinTech/Senior/Kỳ 7/Big Data/bft65b_bank_failure/bft65b_bank_failure/data_proc/panel.parquet]
+    PROJECT 3/42 COLUMNS
+    SELECTION: col("REPDTE") >= 2008-01-01
+    ESTIMATED ROWS: 1676980
+
+threads used by Polars: 12

@@ -1,0 +1,20 @@
+{
+ "train_rows": 1044883,
+ "val_rows": 209341,
+ "features_used": 38,
+ "train_end": "2002Q4",
+ "val": "2004Q1-2009Q4",
+ "mllib_logit": {
+  "pr_auc": 0.5305379436630717,
+  "roc_auc": 0.968354712901577
+ },
+ "mllib_gbt": {
+  "pr_auc": 0.5419195771804077,
+  "roc_auc": 0.9735807058291245
+ },
+ "sklearn_logit_same_split": {
+  "pr_auc": 0.5017959737629297,
+  "roc_auc": 0.9731816922726234
+ },
+ "base_rate_val": 0.005369230107814523
+}

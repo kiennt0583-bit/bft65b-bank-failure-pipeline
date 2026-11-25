@@ -1,0 +1,105 @@
+{
+ "tasks": {
+  "T1": {
+   "pandas": {
+    "median_s": 0.09705169999961072,
+    "peak_mb": 239.32421875,
+    "error": null
+   },
+   "polars_eager": {
+    "median_s": 0.22873559999970894,
+    "peak_mb": 647.71875,
+    "error": null
+   },
+   "polars_lazy": {
+    "median_s": 0.04403120000006311,
+    "peak_mb": 114.44921875,
+    "error": null
+   }
+  },
+  "T2": {
+   "pandas": {
+    "median_s": 0.3040198999997301,
+    "peak_mb": 246.44921875,
+    "error": null
+   },
+   "polars_eager": {
+    "median_s": 0.23388900000009016,
+    "peak_mb": 667.703125,
+    "error": null
+   },
+   "polars_lazy": {
+    "median_s": 0.04279760000008537,
+    "peak_mb": 130.16015625,
+    "error": null
+   }
+  },
+  "T3": {
+   "pandas": {
+    "median_s": 0.6549441999995906,
+    "peak_mb": 379.6875,
+    "error": null
+   },
+   "polars_eager": {
+    "median_s": 0.4820006999998441,
+    "peak_mb": 919.52734375,
+    "error": null
+   },
+   "polars_lazy": {
+    "median_s": 0.27070499999990716,
+    "peak_mb": 437.94140625,
+    "error": null
+   }
+  },
+  "T4": {
+   "pandas": {
+    "median_s": 0.6521620000003168,
+    "peak_mb": 328.66015625,
+    "error": null
+   },
+   "polars_eager": {
+    "median_s": 0.3351058999996894,
+    "peak_mb": 697.59375,
+    "error": null
+   },
+   "polars_lazy": {
+    "median_s": 0.06506759999956557,
+    "peak_mb": 158.265625,
+    "error": null
+   }
+  }
+ },
+ "scale": {
+  "1": {
+   "pandas": {
+    "seconds": 0.6819649999997637,
+    "peak_mb": 373.328125
+   },
+   "polars_lazy": {
+    "seconds": 0.34458709999944404,
+    "peak_mb": 426.1484375
+   }
+  },
+  "4": {
+   "pandas": {
+    "seconds": 5.168096300000798,
+    "peak_mb": 1148.421875
+   },
+   "polars_lazy": {
+    "seconds": 1.402143100000103,
+    "peak_mb": 1015.65625
+   }
+  },
+  "8": {
+   "pandas": {
+    "seconds": 13.078536099999837,
+    "peak_mb": 2177.0390625
+   },
+   "polars_lazy": {
+    "seconds": 4.087345199999618,
+    "peak_mb": 1531.7890625
+   }
+  }
+ },
+ "plan_excerpt": "=== NAIVE plan (optimised=False) ===\nSORT BY [col(\"REPDTE\")]\n  AGGREGATE[maintain_order: false]\n    [(col(\"EQ\") / col(\"ASSET\")).mean().alias(\"er\"), col(\"ASSET\").sum()] BY [col(\"REPDTE\")]\n    FROM\n    FILTER col(\"REPDTE\") >= 2008-01-01\n    FROM\n      Parquet SCAN [C:/Users/Lenovo/Desktop/FinTech/Senior/K\u1ef3 7/Big Data/bft65b_bank_failure/bft65b_bank_failure/data_proc/panel.parquet]\n      PROJECT */42 COLUMNS\n      ESTIMATED ROWS: 1676980\n\n=== OPTIMISED plan ===\nSORT BY [col(\"REPDTE\")]\n  AGGREGATE[maintain_order: false]\n    [(col(\"EQ\") / col(\"ASSET\")).mean().alias(\"er\"), col(\"ASSET\").sum()] BY [col(\"REPDTE\")]\n    FROM\n    Parquet SCAN [C:/Users/Lenovo/Desktop/FinTech/Senior/K\u1ef3 7/Big Data/bft65b_bank_failure/bft65b_bank_failure/data_proc/panel.parquet]\n    PROJECT 3/42 COLUMNS\n    SELECTION: col(\"REPDTE\") >= 2008-01-01\n    ESTIMATED ROWS: 1676980\n\nthreads used by Polars: 12"
+}

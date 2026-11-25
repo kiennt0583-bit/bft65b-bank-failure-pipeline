@@ -1,0 +1,7 @@
+data_raw/
+data_proc/
+*.parquet
+*.csv
+__pycache__/
+.venv/
+results/test_evaluated.flag

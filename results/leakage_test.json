@@ -1,0 +1,21 @@
+{
+ "2005Q4": {
+  "banks_compared": 142,
+  "max_abs_diff": 0.0,
+  "null_pattern_mismatches": 0,
+  "passed": true
+ },
+ "2012Q3": {
+  "banks_compared": 118,
+  "max_abs_diff": 0.0,
+  "null_pattern_mismatches": 0,
+  "passed": true
+ },
+ "2019Q4": {
+  "banks_compared": 84,
+  "max_abs_diff": 0.0,
+  "null_pattern_mismatches": 0,
+  "passed": true
+ },
+ "all_passed": true
+}

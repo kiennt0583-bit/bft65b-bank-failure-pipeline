@@ -1,0 +1,44 @@
+{
+ "spark_version": "4.3.0",
+ "cores": 12,
+ "panel_rows": 1676980,
+ "spark_feature_job_s": 12.54,
+ "groupby_check": {
+  "quarters": 170,
+  "count_equal": true,
+  "asset_sum_equal": true,
+  "y_pos_equal": true,
+  "max_abs_diff_mean_equity_ratio": 1.5265566588595902e-16
+ },
+ "feature_check": {
+  "rows_compared": 1676980,
+  "rows_spark": 1676980,
+  "rows_polars": 1676980,
+  "equity_ratio": {
+   "max_abs_diff": 0.0,
+   "null_pattern_mismatch": 0
+  },
+  "asset_growth_4q": {
+   "max_abs_diff": 0.0,
+   "null_pattern_mismatch": 0
+  },
+  "roa_q": {
+   "max_abs_diff": 0.0,
+   "null_pattern_mismatch": 0
+  },
+  "roa_q_mean4": {
+   "max_abs_diff": 9.094947017729282e-13,
+   "null_pattern_mismatch": 0
+  }
+ },
+ "results_match": true,
+ "plan_excerpt": "== Physical Plan ==\nAdaptiveSparkPlan (9)\n+- Project (8)\n   +- Project (7)\n      +- Window (6)\n         +- Project (5)\n            +- Window (4)\n               +- Sort (3)\n                  +- Exchange (2)\n                     +- Scan parquet  (1)\n\n\n(1) Scan parquet \nOutput [5]: [REPDTE#4, ASSET#18L, NETINC#21L, CERT#30, qidx#33]\nBatched: true\nLocation: InMemoryFileIndex [file:/C:/bft65b/data_proc/panel.parquet]\nReadSchema: struct<REPDTE:date,ASSET:bigint,NETINC:bigint,CERT:int,qidx:int>\n\n(2) Exchange\nInput [5]: [REPDTE#4, ASSET#18L, NETINC#21L, CERT#30, qidx#33]\nArguments: hashpartitioning(CERT#30, 8), ENSURE_REQUIREMENTS, [plan_id=263]\n\n(3) Sort\nInput [5]: [REPDTE#4, ASSET#18L, NETINC#21L, CERT#30, qidx#33]\nArguments: [CERT#30 ASC NULLS FIRST, qidx#33 ASC NULLS FIRST], false, 0\n\n(4) Window\nInput [5]: [REPDTE#4, ASSET#18L, NETINC#21L, CERT#30, qidx#33]\nArguments: [lag(qidx#33, -1, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS _we0#166, lag(NETINC#21L, -1, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS _we1#167L, lag(qidx#33, -4, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -4, -4)) AS _we0#171, lag(ASSET#18L, -4, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -4, -4)) AS _we1#172L, lag(qidx#33, -4, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -4, -4)) AS _we2#173, lag(ASSET#18L, -4, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -4, -4)) AS _we3#174L], [CERT#30], [qidx#33 ASC NULLS FIRST]\n\n(5) Project\nOutput [5]: [CERT#30, REPDTE#4, qidx#33, (cast((CASE WHEN (month(REPDTE#4) = 3) THEN NETINC#21L WHEN ((qidx#33 - _we0#166) = 1) THEN (NETINC#21L - _we1#167L) END * 4) as double) / cast(ASSET#18L as double)) AS roa_q#168, CASE WHEN CASE WHEN ((qidx#33 - _we0#171) = 4) THEN (_we1#172L > 0) END THEN ((cast(ASSET#18L as double) / CASE WHEN ((qidx#33 - _we2#173) = 4) THEN cast(_we3#174L as double) END) - 1.0) END AS asset_growth_4q#170]\nInput [11]: [REPDTE#4, ASSET#18L, NETINC#21L, CERT#30, qidx#33, _we0#166, _we1#167L, _we0#171, _we1#172L, _we2#173, _we3#174L]\n\n(6) Window\nInput [5]: [CERT#30, REPDTE#4, qidx#33, roa_q#168, asset_growth_4q#170]\nArguments: [lag(qidx#33, -1, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS _we0#176, lag(roa_q#168, -1, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS _we1#177, lag(qidx#33, -2, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, -2)) AS _we2#178, lag(roa_q#168, -2, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, -2)) AS _we3#179, lag(qidx#33, -3, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -3, -3)) AS _we4#180, lag(roa_q#168, -3, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -3, -3)) AS _we5#181, lag(qidx#33, -1, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS _we0#183, lag(roa_q#168, -1, null) windowspecdefinition(CERT#30, qidx#33 ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS _we1#184, lag(qidx#33, -2, null) windowspecdefinition(CERT#30, qidx#33",
+ "plan_has_exchange": false,
+ "plan_has_window": true,
+ "plan_pushed_filters": true,
+ "scale_seconds": {
+  "1": 6.08,
+  "4": 13.07,
+  "8": 18.56
+ }
+}
