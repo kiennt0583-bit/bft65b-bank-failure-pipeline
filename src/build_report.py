@@ -32,6 +32,7 @@ def load(name):
 
 meta = json.loads(Path(A.meta).read_text(encoding="utf-8")) if Path(A.meta).exists() else {}
 ST, DQ, BN, SP, FT, LK, MD, ML = (load(n) for n in ("storage", "dq", "bench", "spark", "features", "leakage_test", "model", "mllib"))
+AB = load("ablation")
 NA = "n/a"
 
 
@@ -177,7 +178,7 @@ P("The supervision department needs an early-warning system; this report deliver
   "US FDIC data because Vietnamese supervisory data are not public. Grading emphasises the pipeline, so each stage is designed to be "
   "measured, reproducible and free of look-ahead.")
 BL([
-    "Bronze -> Silver -> Gold (medallion, lecture 'Big Data, Spark & ML'): raw API Parquet per quarter (immutable) -> typed, sorted, "
+    "Bronze -> Silver -> Gold (medallion architecture [14]; lecture 'Big Data, Spark & ML'): raw API Parquet per quarter (immutable) -> typed, sorted, "
     "validated panel -> point-in-time feature table with label.",
     "Every claim is backed by a measurement stored in results/*.json; every design choice is a constant in src/config.py.",
     "Leakage control is structural (backward-looking features, purged time splits, preprocessing inside the Pipeline) and tested automatically.",
@@ -224,7 +225,7 @@ for q in ("Q1 full table", "Q2 5 columns", "Q3 one quarter", "Q4 one bank", "Q5 
     best[q] = min(c)[1] if c else NA
 P(f"Findings. The optimised Parquet file is {ratio(csv_mb, opt_mb)} smaller than the CSV ({g(ST, 'layouts.0.size_mb')} MB -> {g(ST, 'layouts.2.size_mb')} MB). "
   f"Reading 5 of {g(ST, 'raw_cols')} columns is {ratio(num(ST, 'layouts.0.Q2 5 columns'), num(ST, 'layouts.2.Q2 5 columns'))} faster than CSV "
-  f"(projection pushdown: only those column chunks are read); a one-bank history is "
+  f"(projection pushdown: only those column chunks are read; Parquet stores each column in chunks per row group, with metadata and min/max statistics that let a reader skip data [15]); a one-bank history is "
   f"{ratio(num(ST, 'layouts.0.Q4 one bank'), num(ST, 'layouts.2.Q4 one bank'))} faster because sorting by (CERT, REPDTE) gives every row group tight min/max statistics "
   f"and most row groups are skipped. Fastest layout per query: " + "; ".join(f"{k.split(' ')[0]} -> {v}" for k, v in best.items()) + ". "
   f"In RAM the typed table needs {g(ST, 'opt_ram_mb')} MB versus {g(ST, 'pandas_object_ram_mb')} MB for the pandas default (object strings, float64).")
@@ -304,7 +305,7 @@ T([[k, f"{v:,}"] for k, v in pl_.items()], ["Panel construction step", "Rows"], 
 # =========================================================================== PART 3
 H("4. Part 3 - Scalable processing")
 H("4.1 How Polars executes the transformations", 2)
-P("The panel is processed with the lazy API: scan_parquet builds a logical plan, the optimiser applies projection pushdown (only needed columns are "
+P("The panel is processed with the lazy API [16]: scan_parquet builds a logical plan, the optimiser applies projection pushdown (only needed columns are "
   "read), predicate pushdown (filters are applied while scanning, skipping row groups using min/max statistics), common sub-plan elimination and "
   "expression simplification, then executes in parallel across row groups and independent expressions on all cores with a vectorised columnar engine "
   "(Arrow memory). Window expressions (shift(k).over('CERT')) partition the data once by bank and are evaluated per group in parallel. "
@@ -312,7 +313,7 @@ P("The panel is processed with the lazy API: scan_parquet builds a logical plan,
 P("Plan of a filtered group-by (naive vs optimised, from LazyFrame.explain()):", bold=True)
 CODE(BN.get("plan_excerpt", NA), 2600)
 H("4.2 Benchmark against pandas", 2)
-P("Each task runs in a fresh process (3 runs, median; peak resident memory). pandas is given its best practical form (column projection and "
+P("Each task runs in a fresh process (3 runs, median; peak resident memory). pandas [10] is given its best practical form (column projection and "
   "row-group filters through pyarrow where the task allows). polars_eager reads the whole file first; polars_lazy lets the optimiser push work into the scan.")
 names = {"T1": "T1 project+filter (1 quarter)", "T2": "T2 group-by quarter", "T3": "T3 per-bank lags/rolling", "T4": "T4 join + label"}
 rows = []
@@ -342,7 +343,7 @@ H("4.3 Reproducing the steps in PySpark", 2)
 fc = SP.get("feature_check", {})
 gc = SP.get("groupby_check", {})
 P(f"The group-by, the gap-aware lag features (window functions with partitionBy('CERT').orderBy('qidx')) and the label counts were re-implemented in "
-  f"PySpark {g(SP, 'spark_version')} (local[*], {g(SP, 'cores')} cores; spark.sql.shuffle.partitions lowered from 200 to 8 for a 1.7M-row table). "
+  f"PySpark {g(SP, 'spark_version')} [11] (local[*], {g(SP, 'cores')} cores; spark.sql.shuffle.partitions [17] lowered from 200 to 8 for a 1.7M-row table). "
   f"Equality check against the Polars outputs: results match = {g(SP, 'results_match')}.")
 T([["per-quarter count / asset sum / failure-label count equal", f"{g(gc, 'count_equal')} / {g(gc, 'asset_sum_equal')} / {g(gc, 'y_pos_equal')}"],
    ["max |diff| of mean equity ratio per quarter", g(gc, "max_abs_diff_mean_equity_ratio", "{:.2e}")]] +
@@ -383,14 +384,14 @@ P("Argument. (i) For this project (1.7M rows, < 1 GB) a cluster adds overhead an
   "sufficient, so the right architecture is Parquet + Polars. (ii) A cluster becomes justified when one of three measured limits is crossed: the working set no longer fits in RAM "
   "even with streaming/lazy execution (here beyond the extrapolated capacity above, e.g. loan-level or daily transaction data - hundreds of millions to billions "
   "of rows), the job is CPU-bound with runtime that must fall below an SLA (wall time scales ~ 1/N only for the parallel fraction p: speed-up = 1 / ((1 - p) + p/N), "
-  "Amdahl's law, and the shuffle in the window job is part of the serial/communication share), or many users/jobs must share data concurrently. "
+  "Amdahl's law [13], and the shuffle in the window job is part of the serial/communication share), or many users/jobs must share data concurrently. "
   "(iii) The Spark code was verified to give identical results, so migration is a deployment decision, not a rewrite.")
 
 # =========================================================================== PART 4
 H("5. Part 4 - Feature pipeline")
 H("5.1 Feature design", 2)
-P("Features follow the CAMELS framework used by supervisors and the bank-failure literature (capital adequacy, asset quality, earnings, liquidity and "
-  "funding, sensitivity/growth), plus size and age. All are ratios (scale-free across 40 years of inflation and bank sizes), computed from fields "
+P("Features follow the CAMELS framework that US supervisors use to rate banks [1] (capital adequacy, asset quality, earnings, liquidity and "
+  "funding, sensitivity/growth; the 'management' component has no Call Report counterpart and is proxied by efficiency and growth ratios), plus size and age. All are ratios (scale-free across 40 years of inflation and bank sizes), computed from fields "
   "known at the report date. Year-to-date flows are first converted to quarterly flows; flow ratios are annualised (x4).")
 FD = {
     "log_asset": ("ln(ASSET)", "size; too-big-to-fail vs fragile small banks"),
@@ -416,19 +417,55 @@ FD = {
     "securities_share": ("SC / ASSET", "balance-sheet structure"), "d_brokered_4q": ("brokered_share - same, 4q ago", "funding shift"),
 }
 T([[f, *FD.get(f, ("", ""))] for f in FT.get("features", list(FD))], ["Feature", "Definition", "Rationale"], size=7, widths=[3.6, 6.2, 7.2])
+P("texas_ratio (also baseline B2) follows the definition published by the Federal Reserve Bank of St. Louis [2]: problem assets (loans 90+ days past due or on "
+  "nonaccrual, plus foreclosed real estate) divided by loss-absorbing capital. Variant used here: the Call Report field set has no tangible-equity item, so the "
+  "denominator is total equity (EQ) plus the loan-loss allowance (LNATRES), and noncurrent loans (NCLNLS) stand in for past-due-plus-nonaccrual loans.", size=9)
 H("5.2 Leak-free construction", 2)
 BL([
     "All time operations are backward-looking: lag_k only, trailing windows only, per-bank. No centred windows, no future joins, no cross-bank statistics that use later quarters.",
     "Gap-aware lags: lag_k is null unless the row exactly k quarters earlier exists, so a reporting gap cannot silently pull in an older value.",
     "Label joined only through FAILDATE (target) after features are built; FAILDATE never enters a feature.",
     "No imputation, scaling, winsorisation or feature selection in the feature table: they are steps of a scikit-learn Pipeline (DropEmptyColumns -> Winsorizer -> SimpleImputer(median, missing indicators) "
-    "-> StandardScaler -> model) that is fitted on the training fold only, in every CV fold and in the final fit. Calendar year is deliberately NOT a feature (regime identifier).",
+    "-> StandardScaler -> model) that is fitted on the training fold only, in every CV fold and in the final fit (the 'learn-predict separation' that Kaufman et al. [5] recommend against leakage). Calendar year is deliberately NOT a feature (regime identifier).",
 ])
 H("5.3 Automated leakage test", 2)
 T([[k, v["banks_compared"], f"{v['max_abs_diff']:.1e}", v["null_pattern_mismatches"], v["passed"]] for k, v in LK.items() if isinstance(v, dict)],
   ["Cut-off quarter q0", "banks compared", "max |diff|", "null mismatches", "passed"], widths=[3, 3, 3, 3, 2])
-P("Method: for a random sample of banks the whole feature set is recomputed after deleting every row dated after q0; the features at q0 must be identical "
+P("Leakage means a model uses information about the target that it could not legitimately have when it makes the prediction [5]; the test below checks this directly. "
+  "Method: for a random sample of banks the whole feature set is recomputed after deleting every row dated after q0; the features at q0 must be identical "
   f"to those computed from the full history. All cut-offs passed: {g(LK, 'all_passed')}. The pipeline aborts if this test fails (s06).")
+
+H("5.4 Evidence for the feature choices (development CV only)", 2)
+_av = AB.get("variants", {})
+if _av:
+    _ref = _av.get("all features (reference)", {})
+    P("Design rationale alone does not show that a feature group is worth building, so each group was removed in turn and the tuned gradient-boosting model (M2) was re-scored "
+      f"with the same {g(AB, 'n_folds')} purged expanding-window folds, the same pipeline and the same hyper-parameters (script s09; the test period is not loaded). "
+      f"A negative change means the group helps. Reference with all {g(_ref, 'n_features')} features: mean-fold PR-AUC {g(_ref, 'mean_fold_pr_auc', '{:.4f}')}, "
+      f"pooled {g(_ref, 'pooled_pr_auc', '{:.4f}')}.")
+    T([[n, v["n_features"], f"{v['mean_fold_pr_auc']:.4f}", f"{v['delta_mean_fold']:+.4f}", f"{v['pooled_pr_auc']:.4f}", f"{v['delta_pooled']:+.4f}",
+        f"{v['folds_worse_than_ref']}/{g(AB, 'n_folds')}"] for n, v in _av.items() if n != "all features (reference)"],
+      ["Variant", "features", "mean-fold PR-AUC", "change", "pooled PR-AUC", "change", "folds worse than all"], size=7.5, widths=[5.6, 1.5, 2.3, 1.7, 2.2, 1.7, 2.3])
+    FIG("ablation", "Figure 8. Change in mean-fold PR-AUC when a feature group is removed (development CV).", 12)
+    _d = {n: v["delta_mean_fold"] for n, v in _av.items() if n != "all features (reference)"}
+    _hist = _d.get("without history-based features")
+    _grp = {n: d for n, d in _d.items() if n != "without history-based features"}
+    _top = min(_grp, key=_grp.get) if _grp else None
+    _useless = [n.replace("without ", "") for n, d in _grp.items() if d >= 0]
+    _t = ""
+    if _top:
+        _t += f"The largest loss comes from removing {_top.replace('without ', '')} ({_grp[_top]:+.4f}). "
+    if _hist is not None:
+        _t += ("Removing the nine history-based features (lags, growth rates, rolling mean/std; the part of the pipeline that needs gap-aware window functions) changes "
+               f"mean-fold PR-AUC by {_hist:+.4f}, " + ("so they earn their construction cost. " if _hist < 0 else
+                "so on this evidence they do not improve the model; they are kept because they are the leak-controlled, supervisor-style trend signals and the cost is measured above, but the claim 'history features help' is not supported here. "))
+    if _useless:
+        _t += ("Groups whose removal does not lower the score: " + ", ".join(_useless) + " (their information is largely redundant with other groups; they are kept for interpretability). ")
+    _t += ("Differences smaller than the fold-to-fold spread should not be over-read: with a handful of failures in some validation blocks, the 'folds worse than all' column "
+           "(number of folds in which the reduced model scores below the full one) is the more robust indicator.")
+    P(_t, size=9)
+else:
+    P("Ablation results not found (run src/s09_ablation.py).", italic=True)
 
 # =========================================================================== PART 5
 H("6. Part 5 - Modelling and validation")
@@ -442,20 +479,38 @@ P(f"Development {g(S, 'dev')}; gap {g(S, 'gap')} (4 quarters, dropped); test {g(
 cv = MD.get("cv", {})
 P(f"Inside development: expanding-window, purged cross-validation with {g(cv, 'n_folds')} date blocks ({', '.join(cv.get('blocks', []))}). "
   f"For a block starting at q the training set contains only quarters <= q - {g(cv, 'purge_quarters')} (4-quarter label window + 1), so no training label overlaps the "
-  "validation period. Random K-fold (and Spark's CrossValidator) is rejected because it mixes quarters of the same crisis in train and validation (lecture, Problem 10).")
-P("Metrics. Accuracy is meaningless at a base rate of a few failures per 1,000 bank-quarters. Reported: PR-AUC (average precision; the primary, imbalance-sensitive metric), "
-  "ROC-AUC (ranking), lift and recall in the top 5 % of rows, Brier score (calibration, needed because the threshold rests on probabilities) and, for decisions, "
+  "validation period; removing training observations whose label window overlaps the validation period is the 'purging' step of López de Prado [3], and "
+  "blocked (non-random) evaluation schemes are the alternative to random K-fold that Bergmeir and Benitez [4] examine for dependent, possibly non-stationary series.Random K-fold (and Spark's CrossValidator) is rejected "
+  "because it mixes quarters of the same crisis in train and validation (lecture, Problem 10).")
+P("Metrics. Accuracy is meaningless at a base rate of a few failures per 1,000 bank-quarters. Reported: PR-AUC (average precision; the primary metric because, unlike ROC-AUC, it is not inflated by the very large number of true negatives [6]), "
+  "ROC-AUC (ranking), lift and recall in the top 5 % of rows, Brier score [7] (calibration, needed because the threshold rests on probabilities) and, for decisions, "
   "an event-level expected cost: a failing bank is 'caught' if it raises at least one alarm in its four pre-failure quarters; false alarms are counted per bank-quarter.")
 H("6.2 Models and tuning (development CV only)", 2)
 cvr = MD.get("cv_results", {})
 T([[k, g(v, "pooled.pr_auc", "{:.4f}"), g(v, "pooled.roc_auc", "{:.3f}"), g(v, "pooled.lift_top5pct", "{:.1f}"), g(v, "pooled.brier", "{:.4f}")]
    for k, v in cvr.items()], ["Model", "OOF PR-AUC", "OOF ROC-AUC", "lift top 5%", "Brier"], widths=[7, 2.5, 2.5, 2.5, 2.5])
 P("Baselines: B1/B2 are one-variable supervisory rules (no fitting); B3 is a logistic regression on four CAMELS-style variables. Own models: M1 logistic on all features "
-  "(interpretable linear benchmark) and M2 histogram gradient boosting (non-linear interactions, native NaN). Training negatives are subsampled and re-weighted "
+  "(interpretable linear benchmark) and M2 histogram gradient boosting [8] as implemented in scikit-learn [9] (non-linear interactions, native NaN). Training negatives are subsampled and re-weighted "
   "(weight 1/f) inside CV to keep probabilities calibrated while cutting compute. M2 hyper-parameters were chosen by mean fold PR-AUC:")
 T([[t["lr"], t["depth"], t["l2"], f"{t['mean_fold_pr_auc']:.4f}", g(t, "pooled_pr_auc", "{:.4f}")] for t in MD.get("tuning", [])],
   ["learning rate", "max depth", "L2", "mean fold PR-AUC", "pooled PR-AUC"], widths=[3, 3, 2, 4, 4])
 P(f"Selected model (development evidence only): {g(MD, 'selected_model')}.")
+# ---- per-fold view of the three fitted models (explains the pooled B3 / M1 / M2 ordering; development data only)
+_fs = MD.get("cv", {}).get("fold_sizes", [])
+_pf = {k: {m.get("fold"): m.get("pr_auc") for m in v.get("per_fold", [])} for k, v in cvr.items() if v.get("per_fold")}
+_k3, _k1, _k2 = "B3 logit, 4 CAMELS-style vars", "M1 logit, all features", "M2 gradient boosting, tuned"
+if all(k in _pf for k in (_k3, _k1, _k2)) and _fs:
+    _rows = []
+    for i, fs in enumerate(_fs, 1):
+        _rows.append([i, fs["train"], fs["val"], fs["val_pos"], *[("n/a" if _pf[k].get(i) is None else f"{_pf[k][i]:.3f}") for k in (_k3, _k1, _k2)]])
+    T(_rows, ["Fold", "train rows", "val rows", "val positives", "B3 PR-AUC", "M1 PR-AUC", "M2 PR-AUC"], size=8)
+    _w31 = sum(1 for i in _pf[_k1] if _pf[_k1][i] is not None and _pf[_k3].get(i) is not None and _pf[_k1][i] > _pf[_k3][i])
+    _w23 = sum(1 for i in _pf[_k2] if _pf[_k2][i] is not None and _pf[_k3].get(i) is not None and _pf[_k2][i] > _pf[_k3][i])
+    _n = len(_fs)
+    P(f"Reading the folds: M1 (all features) beats the four-variable B3 in {_w31} of {_n} folds and M2 beats B3 in {_w23} of {_n}; the pooled score mixes folds of very different "
+      "size and failure counts, so fold-level agreement is the more reliable signal than the pooled difference. A plausible (untested) reason why a wide logistic model can "
+      "trail a four-variable one in some folds is that early folds train on few quarters with many correlated ratios. The choice of M2 does not depend on the B3/M1 comparison: "
+      "it is the model with the best development CV score, and the ablation in Section 5.4 shows which feature groups it relies on.", size=9)
 H("6.3 Alarm threshold from costs", 2)
 cm = MD.get("cost_model", {})
 P(f"Cost of a missed failure c_FN is the mean COST (loss to the deposit-insurance fund) of the development failures: {g(cm, 'c_fn_mean_cost_kUSD', '{:,.0f}')} thousand USD "
@@ -497,7 +552,7 @@ if _weak or _strong:
       "indicate that Call Report ratios of this field set do not capture liquidity/interest-rate stress well. Metrics such as recall in the top 5 % are almost "
       "identical for all models and are not used to rank them.")
 H("6.5 Spark MLlib demo (development data only)", 2)
-P(f"A chronological split inside the development period (train <= {g(ML, 'train_end')}, validation {g(ML, 'val')}; the test period is not touched) fits a Spark ML Pipeline "
+P(f"A chronological split inside the development period (train <= {g(ML, 'train_end')}, validation {g(ML, 'val')}; the test period is not touched) fits a Spark ML Pipeline [12] "
   "(Imputer -> VectorAssembler -> StandardScaler -> LogisticRegression / GBTClassifier with class weights).")
 T([["MLlib logistic regression", g(ML, "mllib_logit.pr_auc", "{:.4f}"), g(ML, "mllib_logit.roc_auc", "{:.3f}")],
    ["MLlib GBT", g(ML, "mllib_gbt.pr_auc", "{:.4f}"), g(ML, "mllib_gbt.roc_auc", "{:.3f}")],
@@ -507,7 +562,7 @@ _ml, _sk = num(ML, "mllib_logit.pr_auc"), num(ML, "sklearn_logit_same_split.pr_a
 _gb = num(ML, "mllib_gbt.pr_auc")
 _txt = f"Validation base rate {g(ML, 'base_rate_val', '{:.4%}')}. "
 if _ml is not None and _sk is not None:
-    if abs(_ml - _sk) < 0.03:
+    if abs(_ml - _sk) < 0.01:
         _txt += ("MLlib and scikit-learn logistic regression agree closely on the same split "
                  f"({_ml:.3f} vs {_sk:.3f} PR-AUC), which confirms that the implementations are comparable. ")
     else:
@@ -553,6 +608,9 @@ P(f"{verdict} The validation is honest by construction (time-ordered split with 
 H("Limitations", 3)
 BL([
     "Restated data (latest vintage), not as first filed; a true point-in-time store would need the FFIEC original filings.",
+    "Alarm timing: y = 1 uses the window (REPDTE, REPDTE + 1 year] but a quarter's figures are public only from known_from = REPDTE + 45 days, so a bank that fails "
+    "within those first 45 days is counted as a positive although no warning could have been issued from that report; the effect was not quantified in this study, and it can only make the "
+    "recall figures slightly optimistic, not leak information into the features.",
     "c_FP is an assumption (sensitivity shown); c_FN uses the average insurance-fund cost and ignores indirect costs and bank size.",
     "Failures are few in some regimes; the test period mixes the GFC tail, calm years and 2023 (uninsured-deposit runs and interest-rate risk are weakly captured by Call Report ratios of this field set).",
     "Banks that merge are right-censored; failures whose reporting ends > 4 quarters before FAILDATE cannot be labelled.",
@@ -579,10 +637,40 @@ BL([
     "Course material BFT65B, Dr. Nguyen Tuan Long, National Economics University (2026): lectures on ML/Python review, data cleaning and transformation, feature selection, "
     "time-series ML, Big Data/Spark ML essentials (parquet, Polars, Spark windows and shuffle, PR-AUC and cost-based threshold, purged date splits) and the data-visualisation lectures.",
     "Course starter script fdic_download_starter.py (included unchanged as src/fdic_download_starter.py).",
-    "Libraries: polars, pandas, pyarrow, scikit-learn, PySpark (MLlib), matplotlib, python-docx (versions in requirements.txt).",
+    "Libraries: polars [16], pandas [10], pyarrow, scikit-learn [9], PySpark / MLlib [11, 12], matplotlib, python-docx (versions in requirements.txt).",
     "AI tools: " + meta.get("ai_disclosure", "Claude (Anthropic) was used to draft the pipeline code structure and report text; the author ran the pipeline, checked the "
                             "outputs and is responsible for the content."),
 ])
+H("References", 3)
+P("Numbers in square brackets in the text refer to this list. Every item is used at the place where it is cited: [1]-[2] define the feature design (Section 5.1), "
+  "[3]-[7] the validation and metrics (Sections 5.2-6.1), [8]-[9] the models, [10]-[12] and [14]-[17] the storage and processing tools, [13] the cluster argument (Section 4.4).", size=9)
+REFS = [
+    "[1] Federal Deposit Insurance Corporation. Risk Management Manual of Examination Policies, Section 1.1 'Basic Examination Concepts and Guidelines' (Uniform Financial "
+    "Institutions Rating System, CAMELS; adopted 1979, revised 1996; version dated 3/2018). https://www.fdic.gov/resources/supervision-and-examinations/examination-policies-manual/section1-1.pdf",
+    "[2] Jenkins, S. and Romanko, R. (2025). Banking Analytics: Understanding Credit Risk with the Texas Ratio. Federal Reserve Bank of St. Louis, On the Economy, 4 November 2025. "
+    "https://www.stlouisfed.org/on-the-economy/2025/nov/banking-analytics-taking-banks-risk-temperature-texas-ratio",
+    "[3] Lopez de Prado, M. (2018). Advances in Financial Machine Learning. Wiley, ISBN 978-1-119-48208-6 (Chapter 7, cross-validation in finance: purging and embargo).",
+    "[4] Bergmeir, C. and Benitez, J. M. (2012). On the use of cross-validation for time series predictor evaluation. Information Sciences, 191, 192-213.",
+    "[5] Kaufman, S., Rosset, S., Perlich, C. and Stitelman, O. (2012). Leakage in data mining: formulation, detection, and avoidance. ACM Transactions on Knowledge Discovery "
+    "from Data, 6(4), Article 15. https://doi.org/10.1145/2382577.2382579",
+    "[6] Saito, T. and Rehmsmeier, M. (2015). The precision-recall plot is more informative than the ROC plot when evaluating binary classifiers on imbalanced datasets. "
+    "PLoS ONE, 10(3), e0118432. https://doi.org/10.1371/journal.pone.0118432",
+    "[7] Brier, G. W. (1950). Verification of forecasts expressed in terms of probability. Monthly Weather Review, 78(1), 1-3.",
+    "[8] Ke, G. et al. (2017). LightGBM: a highly efficient gradient boosting decision tree. Advances in Neural Information Processing Systems 30 (NeurIPS 2017) "
+    "(the histogram-based tree boosting that scikit-learn's HistGradientBoostingClassifier implements). https://proceedings.neurips.cc/paper/2017/file/6449f44a102fde848669bdd9eb6b76fa-Paper.pdf",
+    "[9] Pedregosa, F. et al. (2011). Scikit-learn: machine learning in Python. Journal of Machine Learning Research, 12, 2825-2830.",
+    "[10] McKinney, W. (2010). Data structures for statistical computing in Python. Proceedings of the 9th Python in Science Conference, 56-61. https://doi.org/10.25080/Majora-92bf1922-00a",
+    "[11] Zaharia, M. et al. (2016). Apache Spark: a unified engine for big data processing. Communications of the ACM, 59(11), 56-65. https://doi.org/10.1145/2934664",
+    "[12] Meng, X. et al. (2016). MLlib: machine learning in Apache Spark. Journal of Machine Learning Research, 17(34), 1-7.",
+    "[13] Amdahl, G. M. (1967). Validity of the single processor approach to achieving large scale computing capabilities. AFIPS Conference Proceedings (Spring Joint Computer Conference), 483-485.",
+    "[14] Databricks documentation. What is the medallion lakehouse architecture? https://docs.databricks.com/aws/en/lakehouse/medallion.html",
+    "[15] Apache Parquet documentation: File Format (row groups, column chunks, file metadata) and Page Index (min/max statistics used to skip data). "
+    "https://parquet.apache.org/docs/file-format/ ; https://parquet.apache.org/docs/file-format/pageindex/",
+    "[16] Polars user guide: Lazy API, Optimizations (projection pushdown, predicate pushdown, common subplan elimination). https://docs.pola.rs/user-guide/lazy/optimizations/",
+    "[17] Apache Spark documentation: SQL Performance Tuning (spark.sql.shuffle.partitions). https://spark.apache.org/docs/latest/sql-performance-tuning.html",
+]
+for _r in REFS:
+    P(_r, size=8.5)
 
 # =========================================================================== APPENDIX
 doc.add_page_break()

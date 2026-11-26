@@ -33,6 +33,7 @@ if not a.skip_spark:
     run(SRC / "s05_spark.py")
 if not a.smoke:
     run(SRC / "s07_model.py")
+    run(SRC / "s09_ablation.py")          # development data only; needs results/model.json from s07
     if not a.skip_spark:
         run(SRC / "s08_spark_mllib.py")
     run(SRC / "build_report.py")
