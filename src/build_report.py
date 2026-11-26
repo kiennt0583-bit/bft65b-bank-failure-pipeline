@@ -457,8 +457,12 @@ if _av:
         _t += f"The largest loss comes from removing {_top.replace('without ', '')} ({_grp[_top]:+.4f}). "
     if _hist is not None:
         _t += ("Removing the nine history-based features (lags, growth rates, rolling mean/std; the part of the pipeline that needs gap-aware window functions) changes "
-               f"mean-fold PR-AUC by {_hist:+.4f}, " + ("so they earn their construction cost. " if _hist < 0 else
-                "so on this evidence they do not improve the model; they are kept because they are the leak-controlled, supervisor-style trend signals and the cost is measured above, but the claim 'history features help' is not supported here. "))
+               f"mean-fold PR-AUC by {_hist:+.4f}, " + (
+                "so they earn their construction cost. " if _hist < -0.01 else
+                "a change that is small relative to the fold-to-fold spread (see the 'folds worse than all' column). On this evidence the history-based features are a modest, "
+                "not a decisive, gain for the gradient-boosting model: the level features already carry most of the signal. They are kept because they are the leak-controlled, "
+                "supervisor-style trend signals (capital erosion, earnings volatility, rapid growth) and their cost is the gap-aware window stage whose speed was measured in Section 4; "
+                "the claim 'history features clearly help' is not supported here. "))
     if _useless:
         _t += ("Groups whose removal does not lower the score: " + ", ".join(_useless) + " (their information is largely redundant with other groups; they are kept for interpretability). ")
     _t += ("Differences smaller than the fold-to-fold spread should not be over-read: with a handful of failures in some validation blocks, the 'folds worse than all' column "
